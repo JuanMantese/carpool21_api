@@ -1,0 +1,20 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "npm",
+			"script": "build",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "npm: build",
+			"detail": "nest build"
+		},
+		{
+			"type": "npm",
+			"script": "start:develop",
+			"problemMatcher": [],
+			"label": "npm: start:develop",
+			"detail": "dotenv -e .env.devel nest start"
+		}
+	]
+}
