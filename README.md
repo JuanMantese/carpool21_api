@@ -4,7 +4,7 @@
   <img alt="carpool_logo" src="./assets/img/logo-carpool21.png" width="150" />
 </p>
 
-A new Flutter Application for students at Universidad Empresarial Siglo 21.
+A new NestJs Application for students at Universidad Empresarial Siglo 21.
 
 Developed by:
   - Juan Mantese
@@ -46,7 +46,13 @@ En el *app.module.ts* se debe configurar la conexion a la base de datos:
 
 ### Pasos para levantar el proyecto
 1- Instalacion de dependencias
-  Ejecutamos: ``` npm i ```
+  Ejecutamos: 
+  ```
+  npm i 
+  ```
 
 2- Levantar el proyecto
-  Ejecutamos: ``` npm run start:dev ```
+  Ejecutamos: 
+  ``` 
+  npm run start:dev 
+  ```
