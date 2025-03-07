@@ -16,9 +16,14 @@ async function bootstrap() {
     storageBucket: 'testprojectcar-96e3b.appspot.com'
   });
 
+  // Crear el API Gateway (HTTP server)
   const app = await NestFactory.create(AppModule);
+
+  // Configuración global de pipes (validación)
   app.useGlobalPipes(new ValidationPipe({ forbidUnknownValues: false }));
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
+
+  // Iniciar el servidor HTTP para el API Gateway
   await app.listen(3000, process.env.HOST || 'localhost');
 }
 

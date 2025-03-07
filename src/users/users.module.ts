@@ -10,11 +10,9 @@ import { UserRole } from './userRole.entity';
 import { UserVehicle } from './userVehicles.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([User, UserRole, UserVehicle, Role, Vehicle]),
-  ],
-  controllers: [UsersController],
-  providers: [UsersService, JwtStrategy],
-  exports: [TypeOrmModule, UsersService]
+  imports: [ TypeOrmModule.forFeature([User, UserRole, UserVehicle, Role, Vehicle]) ],
+  controllers: [ UsersController ],
+  providers: [ UsersService, JwtStrategy ],
+  exports: [ TypeOrmModule, UsersService ]
 })
 export class UsersModule {}

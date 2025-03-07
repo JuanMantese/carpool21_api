@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { TypeOrmModule, getDataSourceToken } from '@nestjs/typeorm';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { RolesModule } from './roles/roles.module';
@@ -15,7 +15,11 @@ import { TripRequestModule } from './trip_request/trip_request.module';
 import { UniversityModule } from './university/university.module';
 import { TripReservationModule } from './trip_reservation/trip_reservation.module';
 import { CompensationModule } from './compensation/compensation.module';
-
+import { TripStatesModule } from './trip_states/trip_states.module';
+import { InsuranceModule } from './insurance/insurance.module';
+import { CardsMockModule } from './cards_mock/cards-mock.module';
+import { CardsModule } from './cards/cards.module';
+import { PaymentsModule } from './payments/payments.module';
 
 
 @Module({
@@ -30,19 +34,26 @@ import { CompensationModule } from './compensation/compensation.module';
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
       synchronize: true, 
     }), 
-    UsersModule, 
-    AuthModule, 
-    RolesModule, 
-    RatingsModule, 
-    SocketModule, 
-    StudentsModule, 
-    CarsModule, 
-    VehiclesModule, 
-    DriversPositionModule, 
+    UsersModule,
+    AuthModule,
+    RolesModule,
+    RatingsModule,
+    SocketModule,
+    StudentsModule,
+    CardsModule,
+    CardsMockModule,
+    CarsModule,
+    VehiclesModule,
+    InsuranceModule,
+    DriversPositionModule,
+    PaymentsModule,
     TripRequestModule, 
-    UniversityModule, TripReservationModule, CompensationModule
+    TripReservationModule,
+    TripStatesModule,
+    UniversityModule,
+    CompensationModule
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [ AppController ],
+  providers: [ AppService ],
 })
 export class AppModule {}

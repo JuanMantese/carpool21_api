@@ -8,7 +8,7 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "runtimeExecutable": "npm",
+            "runtimeExecutable": "/Users/juanmantese/.nvm/versions/node/v18.18.2/bin/npm",
             "runtimeArgs": [
                 "run",
                 "start:develop"

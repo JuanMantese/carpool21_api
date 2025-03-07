@@ -10,7 +10,6 @@ import { RolesService } from 'src/roles/roles.service';
 import { Role } from 'src/roles/role.entity';
 import { Student } from 'src/students/students.entity';
 import { StudentsModule } from 'src/students/students.module';
-import { CarsModule } from '../cars/cars.module';
 import { StudentsService } from 'src/students/students.service';
 import { IsStudentFileExistsConstraint } from 'src/common/validators/is-student-file-exists.validator';
 import { IsDniMatchStudent } from 'src/common/validators/is-dni-match-student.validator';
@@ -20,27 +19,26 @@ import { UserVehicle } from 'src/users/userVehicles.entity';
 import { UsersModule } from 'src/users/users.module';
 import { UsersService } from 'src/users/users.service';
 
-@Module({imports: [TypeOrmModule.forFeature([User, Role, Student, UserRole, UserVehicle]),
-  StudentsModule,
-  PassportModule,
-  UsersModule,
-  JwtModule.register({
-    secret: jwtConstants.secret,
-    signOptions: { expiresIn: '5h' },
-  }),
+@Module({
+  imports: [ TypeOrmModule.forFeature([User, Role, Student, UserRole, UserVehicle]),
+    StudentsModule,
+    PassportModule,
+    UsersModule,
+    JwtModule.register({
+      secret: jwtConstants.secret,
+      signOptions: { expiresIn: '5h' },
+    }),
   ],
-  controllers: [AuthController],
+  controllers: [ AuthController ],
   providers: [
-    AuthService, 
-    RolesService, 
-    JwtStrategy, 
+    AuthService,
+    RolesService,
+    JwtStrategy,
     IsStudentFileExistsConstraint,
     IsDniMatchStudent,
     StudentsService,
     UsersService,
-
-    
   ],
-  exports: [AuthService, JwtModule],
+  exports: [ AuthService, JwtModule ],
 })
 export class AuthModule {}

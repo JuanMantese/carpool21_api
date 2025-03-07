@@ -11,11 +11,19 @@ import { Role } from 'src/roles/role.entity';
 import { RolesService } from 'src/roles/roles.service';
 import { UserVehicle } from 'src/users/userVehicles.entity';
 import { UserRole } from 'src/users/userRole.entity';
+import { InsuranceService } from 'src/insurance/insurance.service';
+import { Insurance } from 'src/insurance/insurance.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Vehicle, User, UserVehicle, UserRole, Role, Car]),],
-  controllers: [VehiclesController],
-  providers: [VehiclesService,IsGreenCardExistsConstraint, CarsService, RolesService],
-  exports: [VehiclesService, TypeOrmModule],
+  imports: [ TypeOrmModule.forFeature([Vehicle, User, UserVehicle, UserRole, Role, Car, Insurance]) ],
+  controllers: [ VehiclesController ],
+  providers: [
+    VehiclesService,
+    IsGreenCardExistsConstraint, 
+    CarsService, 
+    RolesService, 
+    InsuranceService
+  ],
+  exports: [ VehiclesService, TypeOrmModule ],
 })
 export class VehiclesModule {}

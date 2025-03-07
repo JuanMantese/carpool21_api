@@ -6,9 +6,9 @@ import { Car } from './cars.entity';
 import { IsGreenCardExistsConstraint } from '../common/validators/is-greenCard-exists.validator';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Car])],
-  controllers: [CarsController],
-  providers: [IsGreenCardExistsConstraint, CarsService],
-  exports: [CarsService, TypeOrmModule],
+  imports: [ TypeOrmModule.forFeature([Car]) ],
+  controllers: [ CarsController ],
+  providers: [ IsGreenCardExistsConstraint, CarsService ],
+  exports: [ CarsService, TypeOrmModule ],
 })
 export class CarsModule {}
