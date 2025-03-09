@@ -98,12 +98,9 @@ export class CardsService {
       relations: ['user'], // Si necesitas asegurarte de que la relación con el usuario también se cargue
     });
   
+    // Si no se encuentran tarjetas para este usuario, devolver un array vacío
     if (!cards || cards.length === 0) {
-      throw new NotFoundException({
-        statusCode: 404,
-        errorCode: 'CARDS_NOT_FOUND',
-        message: 'No hay tarjetas registradas para este usuario',
-      });
+      return [];
     }
 
     // Eliminar la propiedad 'user' de cada tarjeta en el array

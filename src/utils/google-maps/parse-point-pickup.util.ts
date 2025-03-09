@@ -1,3 +1,4 @@
+// Método auxiliar para convertir el texto de la ubicación en un objeto Point
 export function parsePointPickup(pointText: string): { pickupLat: number, pickupLng: number } {
   const matches = pointText.match(/POINT\(([^ ]+) ([^ ]+)\)/);
   if (!matches) throw new Error('Invalid point format');

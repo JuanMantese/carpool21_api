@@ -1,10 +1,9 @@
-import { BadRequestException, HttpException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Vehicle } from './vehicles.entity';
 import { Repository } from 'typeorm';
 import { CreateVehicleDTO } from './dto/create-vehicle.dto';
 import { User } from 'src/users/users.entity';
-import { RolesService } from 'src/roles/roles.service';
 import { UpdateVehicleDTO } from './dto/update-vehicle.dto';
 import { UserVehicle } from 'src/users/userVehicles.entity';
 import { UserRole } from 'src/users/userRole.entity';
@@ -19,7 +18,7 @@ export class VehiclesService {
     @InjectRepository(UserVehicle) private userVehicleRepository: Repository<UserVehicle>,
     @InjectRepository(UserRole) private userRoleRepository: Repository<UserRole>,
     @InjectRepository(Role) private roleRepository: Repository<Role>,
-    private readonly rolesService: RolesService,
+
     private readonly insuranceService: InsuranceService,
   ) {}
 
@@ -234,6 +233,36 @@ export class VehiclesService {
     return activeVehicles;
   }
 
+  async findOne(idVehicle: number): Promise<any> {
+    const vehicle = await this.vehiclesRepository.findOne({ 
+      where: { idVehicle }, 
+      relations: ['insurance'] 
+    });
+
+    if (!vehicle) {
+      console.error(`Error: Vehículo con ID ${idVehicle} no encontrado.`);
+      throw new NotFoundException({
+        statusCode: 404,
+        message: `Vehículo con ID ${idVehicle} no encontrado.`,
+      });
+    }
+
+    return {
+      idVehicle: vehicle.idVehicle,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      color: vehicle.color,
+      year: vehicle.year,
+      patent: vehicle.patent,
+      greenCard: vehicle.greenCard,
+      insuranceCompany: vehicle.insurance?.insuranceCompany || null,
+      insuranceType: vehicle.insurance?.insuranceType || null,
+      insuranceExpiration: vehicle.insurance?.insuranceExpiration || null,
+      policyNumber: vehicle.insurance?.policyNumber || null,
+      cuilCuit: vehicle.insurance?.cuil_cuit || null,
+    }; 
+  }
+
   async getUserVehicle(idUser: number, idVehicle: number): Promise<any> {
     const userVehicle = await this.userVehicleRepository.findOne({ 
       where: { user: { idUser }, 
@@ -249,12 +278,9 @@ export class VehiclesService {
       });
     }
 
-    
-    
     const vehicle = userVehicle.vehicle;
     console.log(vehicle);
     console.log(vehicle.insurance?.cuil_cuit);
-    
 
     return {
       idVehicle: vehicle.idVehicle,

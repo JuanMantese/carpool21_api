@@ -62,10 +62,7 @@ export class TripReservationService {
     if (existingReservation.length > 0) {
       throw new BadRequestException('Passenger already has a reservation for this trip');
     }
-
-    console.log(paymentMethod);
     
-
     // 2. Procesar el método de pago
     let isPaid = false;
     let paymentId = null;
@@ -147,13 +144,18 @@ export class TripReservationService {
           t.distance, 
           t.timeDifference, 
           t.observations, 
+          t.stateId, 
           v.idVehicle, 
           v.brand, 
           v.model, 
           v.year, 
           v.patent, 
           v.color,
-          u.idUser as idDriver, 
+          i.insuranceCompany, 
+          i.insuranceType, 
+          i.insuranceExpiration, 
+          i.policyNumber, 
+          i.cuil_cuit,
           u.name as driverName, 
           u.lastName as driverLastName, 
           u.phone as driverPhone, 
@@ -167,6 +169,7 @@ export class TripReservationService {
         JOIN trip_requests t ON tr.tripRequestId = t.idTrip
         JOIN vehicles v ON t.vehicleId = v.idVehicle
         JOIN users u ON t.idDriver = u.idUser
+        LEFT JOIN insurance i ON v.idVehicle = i.idVehicle
         LEFT JOIN compensation c ON t.compensationId = c.idCompensation
         LEFT JOIN payments p ON t.idTrip = p.tripId AND tr.idUser = p.userId
         WHERE tr.tripRequestId = ? AND tr.idUser = ?
@@ -206,17 +209,22 @@ export class TripReservationService {
         distance: reservation.distance,
         timeDifference: reservation.timeDifference,
         observations: reservation.observations,
+        state: reservation.stateId,
         vehicle: {
           idVehicle: reservation.idVehicle,
           brand: reservation.brand,
           model: reservation.model,
           year: reservation.year,
           patent: reservation.patent,
-          color: reservation.color
+          color: reservation.color,
+          insuranceCompany: reservation.insuranceCompany,
+          insuranceType: reservation.insuranceType,
+          insuranceExpiration: reservation.insuranceExpiration,
+          policyNumber: reservation.policyNumber,
+          cuilCuit: reservation.cuil_cuit,
         }
       },
       driver: {
-        idDriver: reservation.idDriver,
         name: reservation.driverName,
         lastName: reservation.driverLastName,
         phone: reservation.driverPhone,
@@ -234,55 +242,35 @@ export class TripReservationService {
   }
 
 
-  // Método para actualizar las reservas de un viaje
-  async updateTripReserves(tripRequestId: number): Promise<TripRequest> {
-    // Buscar la solicitud de viaje por ID junto con las reservas asociadas
-    const tripRequest = await this.tripRequestRepository.findOne({
-      where: { idTrip: tripRequestId },
-      relations: ['reservations'],
-    });
-
-    // Lanzar una excepción si no se encuentra la solicitud de viaje
-    if (!tripRequest) {
-      throw new NotFoundException('Trip request not found');
-    }
-
-    // Contar el número de reservas realizadas para este viaje
-    const reservedSeats = tripRequest.reservations.length;
-
-    // Restar el número de asientos reservados de los asientos disponibles
-    tripRequest.availableSeats -= reservedSeats;
-
-    // Guardar y devolver la solicitud de viaje actualizada
-    return this.tripRequestRepository.save(tripRequest);
-  }
-
-
   // Método para cancelar una reserva
   async cancelReservation(idReservation: number): Promise<TripReservation> {
     // Buscar la reserva por ID junto con la solicitud de viaje asociada
-    const reservation = await this.tripReservationRepository.findOne({
-      where: { idReservation: idReservation },
-      relations: ['tripRequest'],
-    });
-
-    // Lanzar una excepción si no se encuentra la reserva
+    const reservation = await this.findOne(idReservation);
     if (!reservation) {
       throw new NotFoundException('Reservation not found');
     }
-
+    
     // Establecer la fecha de cancelación de la reserva a la fecha y hora actual
     reservation.cancellationDate = new Date();
 
-    // Incrementar el número de asientos disponibles en la solicitud de viaje asociada
-    reservation.tripRequest.availableSeats += 1;
+    const tripRequest = await this.tripRequestService.findOne(reservation.tripRequest.idTrip);
+    if (!tripRequest) {
+      throw new NotFoundException('Reservation not found');
+    }
 
-    // Guardar los cambios en la solicitud de viaje en el repositorio
-    await this.tripRequestRepository.save(reservation.tripRequest);
+    // Incrementar el número de asientos disponibles en la solicitud de viaje asociada
+    tripRequest.availableSeats += 1;
+
+    // Aumentamos el número de asientos disponibles en el viaje
+    await this.tripRequestRepository.query(
+      `UPDATE trip_requests SET availableSeats = ? WHERE idTrip = ?`,
+      [tripRequest.availableSeats, tripRequest.idTrip]
+    );
 
     // Guardar la reserva actualizada en el repositorio y devolverla
     return this.tripReservationRepository.save(reservation);
   }
+
 
   // Método para actualizar una reserva
   async update(idReservation: number, updateTripReservationDTO: UpdateTripReservationDTO): Promise<TripReservation> {
@@ -327,6 +315,7 @@ export class TripReservationService {
           tr.idReservation, 
           tr.isPaid, 
           tr.reservationDate, 
+          tr.cancellationDate, 
           t.idTrip, 
           t.idDriver, 
           t.pickupNeighborhood, 
@@ -340,13 +329,18 @@ export class TripReservationService {
           t.distance, 
           t.timeDifference, 
           t.observations, 
+          t.stateId, 
           v.idVehicle, 
           v.brand, 
           v.model, 
           v.year, 
           v.patent, 
           v.color,
-          u.idUser as idDriver, 
+          i.insuranceCompany, 
+          i.insuranceType, 
+          i.insuranceExpiration, 
+          i.policyNumber,
+          i.cuil_cuit,
           u.name as driverName, 
           u.lastName as driverLastName, 
           u.phone as driverPhone, 
@@ -360,6 +354,7 @@ export class TripReservationService {
         JOIN trip_requests t ON tr.tripRequestId = t.idTrip
         JOIN vehicles v ON t.vehicleId = v.idVehicle
         JOIN users u ON t.idDriver = u.idUser
+        LEFT JOIN insurance i ON v.idVehicle = i.idVehicle
         LEFT JOIN compensation c ON t.compensationId = c.idCompensation
         LEFT JOIN payments p ON t.idTrip = p.tripId AND tr.idUser = p.userId
         WHERE idReservation = ?
@@ -387,6 +382,7 @@ export class TripReservationService {
     return {
       idReservation: reservation.idReservation,
       isPaid: Boolean(reservation.isPaid),
+      cancellationDate: reservation.cancellationDate,
       tripRequest: {
         idTrip: reservation.idTrip,
         idDriver: reservation.idDriver,
@@ -403,17 +399,22 @@ export class TripReservationService {
         distance: reservation.distance,
         timeDifference: reservation.timeDifference,
         observations: reservation.observations,
+        state: reservation.stateId,
         vehicle: {
           idVehicle: reservation.idVehicle,
           brand: reservation.brand,
           model: reservation.model,
           year: reservation.year,
           patent: reservation.patent,
-          color: reservation.color
+          color: reservation.color,
+          insuranceCompany: reservation.insuranceCompany,
+          insuranceType: reservation.insuranceType,
+          insuranceExpiration: reservation.insuranceExpiration,
+          policyNumber: reservation.policyNumber,
+          cuilCuit: reservation.cuil_cuit,
         }
       },
       driver: {
-        idDriver: reservation.idDriver,
         name: reservation.driverName,
         lastName: reservation.driverLastName,
         phone: reservation.driverPhone,
@@ -437,11 +438,14 @@ export class TripReservationService {
 
     // Obtener todas las reservas del usuario
     const reservations = await this.tripReservationRepository.query(
-      `SELECT tr.idReservation, tr.isPaid, tr.tripRequestId 
+      `SELECT tr.idReservation, tr.isPaid, tr.tripRequestId, tr.cancellationDate 
         FROM trip_reservations tr
         WHERE tr.idUser = ?`,
       [passengerId]
     );
+
+    console.log(reservations);
+    
 
     if (!reservations.length) {
       return {
@@ -456,166 +460,57 @@ export class TripReservationService {
     }));
 
     // Separar reservas futuras y pasadas según la fecha de salida
-    const futureReservations = reservationsWithDetails.filter(reservation => reservation.tripRequest.departureTime > currentTime);
-    const pastReservations = reservationsWithDetails.filter(reservation => reservation.tripRequest.departureTime <= currentTime);
+    // const futureReservations = reservationsWithDetails.filter(reservation => reservation.tripRequest.departureTime > currentTime);
+    const futureReservations = reservationsWithDetails.filter(reservation => 
+      !reservation.cancellationDate && reservation.tripRequest.departureTime > currentTime
+    );
+    // const pastReservations = reservationsWithDetails.filter(reservation => reservation.tripRequest.departureTime <= currentTime);
+    const pastReservations = reservationsWithDetails.filter(reservation => 
+      reservation.cancellationDate || reservation.tripRequest.departureTime <= currentTime
+    );
 
     return {
       futureReservations,
       pastReservations
     };
-
-
-    // const futureReservations = await this.tripReservationRepository.query(
-    //   `SELECT tr.idReservation, tr.isPaid, t.idTrip, t.idDriver, t.pickupNeighborhood, t.pickupText, 
-    //           ST_AsWKT(t.pickupLocation) as pickupLocation, t.destinationNeighborhood, t.destinationText, 
-    //           ST_AsWKT(t.destinationLocation) as destinationLocation, t.compensationId, t.departureTime, 
-    //           t.distance, t.timeDifference, t.observations, t.vehicleId, u.idUser, u.name, u.lastName, u.phone, u.photoUser
-    //     FROM trip_reservations tr
-    //     JOIN trip_requests t ON tr.tripRequestId = t.idTrip
-    //     JOIN users u ON t.idDriver = u.idUser
-    //     WHERE tr.idUser = ? AND t.departureTime > ?`,
-    //   [passengerId, currentTime]
-    // );
-  
-    // const pastReservations = await this.tripReservationRepository.query(
-    //   `SELECT tr.idReservation, tr.isPaid, t.idTrip, t.idDriver, t.pickupNeighborhood, t.pickupText, 
-    //           ST_AsWKT(t.pickupLocation) as pickupLocation, t.destinationNeighborhood, t.destinationText, 
-    //           ST_AsWKT(t.destinationLocation) as destinationLocation, t.compensationId, t.departureTime, 
-    //           t.distance, t.timeDifference, t.observations, t.vehicleId, u.idUser, u.name, u.lastName, u.phone, u.photoUser
-    //     FROM trip_reservations tr
-    //     JOIN trip_requests t ON tr.tripRequestId = t.idTrip
-    //     JOIN users u ON t.idDriver = u.idUser
-    //     WHERE tr.idUser = ? AND t.departureTime <= ?`,
-    //   [passengerId, currentTime]
-    // );
-
-    // console.log(pastReservations);
-    
-
-    // const futureReservationsWithDetails = await Promise.all(futureReservations.map(async (reservation) => {
-    //   const { pickupLat, pickupLng } = this.parsePointPickup(reservation.pickupLocation);
-    //   const { destinationLat, destinationLng } = this.parsePointDestination(reservation.destinationLocation);
-
-    //   const vehicle = await this.vehicleRepository.query(
-    //     `SELECT idVehicle, brand, model, year, patent, color 
-    //       FROM vehicles 
-    //       WHERE idVehicle = ?`,
-    //     [reservation.vehicleId]
-    //   );
-
-    //   const vehicleDetails = vehicle.length ? vehicle[0] : { brand: '', model: '', year: '', patent: '', color: '' };
-
-    //   // Obtener el monto de la compensación si existe
-    //   if (reservation.compensationId) {
-    //     const compensationData = await this.compensationService.findOne(reservation.compensationId);
-    //     reservation.compensationId = compensationData ? compensationData.amount : 0;
-    //   }
-
-    //   return {
-    //     idReservation: reservation.idReservation,
-    //     isPaid: Boolean(reservation.isPaid),
-    //     tripRequest: {
-    //       idTrip: reservation.idTrip,
-    //       idDriver: reservation.idDriver,
-    //       pickupNeighborhood: reservation.pickupNeighborhood,
-    //       pickupText: reservation.pickupText,
-    //       pickupLat,
-    //       pickupLng,
-    //       destinationNeighborhood: reservation.destinationNeighborhood,
-    //       destinationText: reservation.destinationText,
-    //       destinationLat,
-    //       destinationLng,
-    //       compensation: reservation.compensationId,
-    //       departureTime: reservation.departureTime,
-    //       distance: reservation.distance,
-    //       timeDifference: reservation.timeDifference,
-    //       observations: reservation.observations,
-    //       vehicle: vehicleDetails
-    //     },
-    //     driver: {
-    //       idDriver: reservation.idDriver,
-    //       name: reservation.name,
-    //       lastName: reservation.lastName,
-    //       phone: reservation.phone,
-    //       photoUser: reservation.photoUser,
-    //     }
-    //   };
-    // }));
-  
-    // const pastReservationsWithDetails = await Promise.all(pastReservations.map(async (reservation) => {
-    //   const { pickupLat, pickupLng } = this.parsePointPickup(reservation.pickupLocation);
-    //   const { destinationLat, destinationLng } = this.parsePointDestination(reservation.destinationLocation);
-
-    //   const vehicle = await this.vehicleRepository.query(
-    //     `SELECT idVehicle, brand, model, year, patent, color 
-    //       FROM vehicles 
-    //       WHERE idVehicle = ?`,
-    //     [reservation.vehicleId]
-    //   );
-
-    //   const vehicleDetails = vehicle.length ? vehicle[0] : { brand: '', model: '', year: '', patent: '', color: '' };
-
-    //   // Obtener el monto de la compensación si existe
-    //   if (reservation.compensationId) {
-    //     const compensationData = await this.compensationService.findOne(reservation.compensationId);
-    //     reservation.compensationId = compensationData ? compensationData.amount : 0;
-    //   }
-
-    //   return {
-    //     idReservation: reservation.idReservation,
-    //     isPaid: Boolean(reservation.isPaid),
-    //     tripRequest: {
-    //       idTrip: reservation.idTrip,
-    //       idDriver: reservation.idDriver,
-    //       pickupNeighborhood: reservation.pickupNeighborhood,
-    //       pickupText: reservation.pickupText,
-    //       pickupLat,
-    //       pickupLng,
-    //       destinationNeighborhood: reservation.destinationNeighborhood,
-    //       destinationText: reservation.destinationText,
-    //       destinationLat,
-    //       destinationLng,
-    //       compensation: reservation.compensationId,
-    //       departureTime: reservation.departureTime,
-    //       distance: reservation.distance,
-    //       timeDifference: reservation.timeDifference,
-    //       observations: reservation.observations,
-    //       vehicle: vehicleDetails
-    //     },
-    //     driver: {
-    //       idDriver: reservation.idDriver,
-    //       name: reservation.name,
-    //       lastName: reservation.lastName,
-    //       phone: reservation.phone,
-    //       photoUser: reservation.photoUser,
-    //     }
-    //   };
-    // }));
-
-    // return {
-    //   futureReservations: futureReservationsWithDetails,
-    //   pastReservations: pastReservationsWithDetails
-    // };
   }
-    
+
+
+  /** NO UTILIZADO  -  METODO PARA ACTUALIZAR LOS ASIENTOS DISPONIBLES EN UNA RESERVA */
+  // Método para actualizar los asientos disponibles de un viaje
+  async updateTripReserves(tripRequestId: number): Promise<TripRequest> {
+    // Buscar la solicitud de viaje por ID junto con las reservas asociadas
+    const tripRequest = await this.tripRequestRepository.findOne({
+      where: { idTrip: tripRequestId },
+      relations: ['reservations'],
+    });
+
+    // Lanzar una excepción si no se encuentra la solicitud de viaje
+    if (!tripRequest) {
+      throw new NotFoundException('Trip request not found');
+    }
+
+    // Contar el número de reservas realizadas para este viaje
+    const reservedSeats = tripRequest.reservations.length;
+
+    // Restar el número de asientos reservados de los asientos disponibles
+    tripRequest.availableSeats -= reservedSeats;
+
+    // Guardar y devolver la solicitud de viaje actualizada
+    return this.tripRequestRepository.save(tripRequest);
+  }
+
+
   // Método auxiliar para convertir el texto de la ubicación en un objeto Point
-  private parsePointPickup(pointText: string): { pickupLat: number, pickupLng: number } {
+  private parsePoint(pointText: string): Point {
     const matches = pointText.match(/POINT\(([^ ]+) ([^ ]+)\)/);
     if (!matches) throw new Error('Invalid point format');
     return {
-      pickupLat: parseFloat(matches[2]),
-      pickupLng: parseFloat(matches[1]),
+      type: 'Point',
+      coordinates: [parseFloat(matches[1]), parseFloat(matches[2])]
     };
   }
   
-  private parsePointDestination(pointText: string): { destinationLat: number, destinationLng: number } {
-    const matches = pointText.match(/POINT\(([^ ]+) ([^ ]+)\)/);
-    if (!matches) throw new Error('Invalid point format');
-    return {
-      destinationLat: parseFloat(matches[2]),
-      destinationLng: parseFloat(matches[1]),
-    };
-  }
 
   // Método auxiliar para encontrar la solicitud de viaje por ID
   private async findTripRequestById(idTrip: number): Promise<any> {
@@ -636,7 +531,7 @@ export class TripReservationService {
     const destinationLocationMatches = trip[0].destinationLocation.match(/POINT\(([^ ]+) ([^ ]+)\)/);
 
     const driver = await this.userRepository.query(
-      `SELECT idUser, name, lastName, phone, photoUser 
+      `SELECT name, lastName, phone, photoUser 
         FROM users 
         WHERE idUser = ?`,
       [trip[0].idDriver]
@@ -695,14 +590,5 @@ export class TripReservationService {
       photoUser: user[0].photoUser,
     };
   }
-
-    // Método auxiliar para convertir el texto de la ubicación en un objeto Point
-  private parsePoint(pointText: string): Point {
-    const matches = pointText.match(/POINT\(([^ ]+) ([^ ]+)\)/);
-    if (!matches) throw new Error('Invalid point format');
-    return {
-      type: 'Point',
-      coordinates: [parseFloat(matches[1]), parseFloat(matches[2])]
-    };
-  }
+  
 }

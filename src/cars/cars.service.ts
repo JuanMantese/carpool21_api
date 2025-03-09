@@ -6,21 +6,20 @@ import { CreateCarDTO } from './dto/creato-car.dto';
 
 @Injectable()
 export class CarsService {
-    constructor(
-        @InjectRepository(Car) private carsRepository: Repository<Car>,
-    ) {}
+  constructor(
+    @InjectRepository(Car) private carsRepository: Repository<Car>,
+  ) {}
 
-    create(carDTO: CreateCarDTO) {
-        const newCar = this.carsRepository.create(carDTO);
-        return this.carsRepository.save(newCar);
-    }
+  create(carDTO: CreateCarDTO) {
+    const newCar = this.carsRepository.create(carDTO);
+    return this.carsRepository.save(newCar);
+  }
 
-    delete(id: number) {
-        return this.carsRepository.delete(id);
-    }
+  delete(id: number) {
+    return this.carsRepository.delete(id);
+  }
 
-    async findCar(greenCard: string): Promise<Car | null> {
-        return await this.carsRepository.findOneBy({ greenCard });
-    }
-
+  async findCar(greenCard: string): Promise<Car | null> {
+    return await this.carsRepository.findOneBy({ greenCard });
+  }
 }

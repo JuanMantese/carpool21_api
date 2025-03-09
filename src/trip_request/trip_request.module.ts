@@ -9,12 +9,16 @@ import { User } from 'src/users/users.entity';
 import { Compensation } from 'src/compensation/compensation.entity';
 import { TripState } from 'src/trip_states/trip_states.entity';
 import { CompensationService } from 'src/compensation/compensation.service';
+import { VehiclesService } from 'src/vehicles/vehicles.service';
+import { VehiclesModule } from 'src/vehicles/vehicles.module';
+import { InsuranceService } from 'src/insurance/insurance.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TripRequest, Vehicle, TripReservation, User, Compensation, TripState]),
+    VehiclesModule
   ],
-  providers: [ TripRequestService, CompensationService ],
+  providers: [ TripRequestService, CompensationService, VehiclesService, InsuranceService ],
   controllers: [ TripRequestController ],
   exports: [ TripRequestService, CompensationService ],
 })

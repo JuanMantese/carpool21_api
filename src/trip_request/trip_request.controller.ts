@@ -48,11 +48,6 @@ export class TripRequestController {
     return this.tripRequestService.updateTrip(id, updateTripRequestDTO);
   }
 
-  @Put('update-reserves/:id') // PUT /trip-request/update-reserves/:id
-  updateTripReserves(@Param('id') id: number) {
-    return this.tripRequestService.updateTripReserves(id);
-  }
-
   @HasRoles(JwtRole.DRIVER)
   @UseGuards(JwtAuthGuard, JwtRolesGuard)
   @Delete('delete/:id') // DELETE /trip-request/delete/:id

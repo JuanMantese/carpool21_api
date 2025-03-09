@@ -15,14 +15,18 @@ import { CardsMock } from 'src/cards_mock/cards-mock.entity';
 import { PaymentsService } from 'src/payments/payments.service';
 import { Payments } from 'src/payments/payments.entity';
 import { PaymentsModule } from 'src/payments/payments.module';
+import { VehiclesService } from 'src/vehicles/vehicles.service';
+import { VehiclesModule } from 'src/vehicles/vehicles.module';
+import { InsuranceService } from 'src/insurance/insurance.service';
 
 @Module({
   imports: [ 
     TypeOrmModule.forFeature([TripReservation, TripRequest, User, Vehicle, Compensation, Payments, Cards, CardsMock ]),
     TripRequestModule, // 🔹 Importamos el módulo para que CompensationService esté disponible
+    VehiclesModule,
     PaymentsModule
   ],
-  providers: [ TripReservationService, TripRequestService, CompensationService, PaymentsService ],
+  providers: [ TripReservationService, TripRequestService, CompensationService, PaymentsService, VehiclesService, InsuranceService ],
   controllers: [ TripReservationController ],
 })
 export class TripReservationModule {}

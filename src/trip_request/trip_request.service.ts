@@ -15,6 +15,7 @@ import { parsePointPickup } from 'src/utils/google-maps/parse-point-pickup.util'
 import { parsePointDestination } from 'src/utils/google-maps/parse-point-destination.util';
 import { calculateDistance } from 'src/utils/google-maps/calculate-distance.util';
 import { CompensationService } from 'src/compensation/compensation.service';
+import { VehiclesService } from 'src/vehicles/vehicles.service';
 
 @Injectable()
 export class TripRequestService extends Client{
@@ -31,13 +32,13 @@ export class TripRequestService extends Client{
     @InjectRepository(User) private userRepository: Repository<User>,
 
     private readonly compensationService: CompensationService,
+    private readonly vehicleService: VehiclesService,
   ) {
     super();
   }
 
   // Método para crear una nueva solicitud de viaje
   async create(createTripRequestDTO: CreateTripRequestDTO, idDriver: number): Promise<any> {
-    
     const { 
       vehicleId, 
       pickupLat, 
@@ -51,7 +52,7 @@ export class TripRequestService extends Client{
       
     try {
       // Buscar el vehículo por ID
-      const vehicle = await this.vehicleRepository.findOneBy({ idVehicle: vehicleId });
+      const vehicle = await this.vehicleService.findOne(vehicleId);
       if (!vehicle) {
         throw new NotFoundException('Vehicle not found');
       }
@@ -65,6 +66,7 @@ export class TripRequestService extends Client{
       // Calcular la distancia y el tiempo de viaje usando la API de Google Maps
       let distance: number;
       let timeDifference: number;
+
       try {
         const distanceMatrixResponse = await retryRequest(() => this.getTimeAndDistanceClientRequest(
           pickupLat, 
@@ -75,32 +77,12 @@ export class TripRequestService extends Client{
         ));
         console.log('Distance Matrix Response:', distanceMatrixResponse);
 
-        // FORMA ANTERIOR DE REALIZAR LA CONSULTA POR EL MATRIX TIME AND DISTANCE
-        // if (distanceMatrixResponse.rows && distanceMatrixResponse.rows.length > 0) {
-        //     const elements = distanceMatrixResponse.rows[0].elements;
-        //     console.log('Elements:', elements); 
-        //     if (elements && elements.length > 0 && elements[0].status === 'OK') {
-        //         distance = elements[0].distance ? parseFloat((elements[0].distance.value / 1000).toFixed(1)) : null; 
-        //         timeDifference = elements[0].duration ? Math.round(elements[0].duration.value / 60) : null; 
-
-        //         if (distance === null || timeDifference === null) {
-        //             throw new Error('Distance or duration data is missing in the response');
-        //         }
-        //     } else {
-        //         throw new Error('Distance or duration data is missing or invalid in the response');
-        //     }
-        // } else {
-        //     throw new Error('Rows data is missing in the response');
-        // }
-        // FORMA ANTERIOR DE REALIZAR LA CONSULTA POR EL MATRIX TIME AND DISTANCE
-
         if (distanceMatrixResponse.distance && distanceMatrixResponse.duration) {
           distance = parseFloat((distanceMatrixResponse.distance.value / 1000).toFixed(1)); 
           timeDifference = Math.round(distanceMatrixResponse.duration.value / 60); 
         } else {
           throw new Error('Distance or duration data is missing or invalid in the response');
         }
-
       } catch (error) {
         console.error('Error in getTimeAndDistanceClientRequest:', error.message);
         throw new Error('Failed to fetch distance matrix data');
@@ -169,40 +151,6 @@ export class TripRequestService extends Client{
         ]
       );
 
-      // const pickupLocation1: Point = {
-      //   type: 'Point',
-      //   coordinates: [pickupLng, pickupLat],
-      // };
-      
-      // const destinationLocation1: Point = {
-      //   type: 'Point',
-      //   coordinates: [destinationLng, destinationLat],
-      // };
-
-      // const body = {
-      //   driver: driver,
-      //   pickupNeighborhood: createTripRequestDTO.pickupNeighborhood,
-      //   pickupText: createTripRequestDTO.pickupText,
-      //   pickupLocation: pickupLocation1,
-      //   destinationNeighborhood: createTripRequestDTO.destinationNeighborhood,
-      //   destinationText: createTripRequestDTO.destinationText,
-      //   destinationLocation: destinationLocation1,
-      //   availableSeats,
-      //   compensation: compensation.amount,
-      //   departureTime: createTripRequestDTO.departureTime,
-      //   distance,
-      //   timeDifference,
-      //   observations,
-      //   vehicle: vehicle,
-      //   stateId: 1, // Estado "Creado"
-      // }
-
-      // // Crear y guardar la solicitud de viaje utilizando una consulta bruta para las posiciones espaciales
-      // const tripRequest = this.tripRequestRepository.create(body);
-
-
-      // const createdTrip = await this.tripRequestRepository.save(tripRequest);
-
       console.log('Viaje creado');
 
       // Creando la Compensation Data
@@ -240,6 +188,7 @@ export class TripRequestService extends Client{
         distance,
         timeDifference,
         observations: createdTrip[0].observations,
+        state: createdTrip[0].stateId,
         idDriver: driver.idUser,
         driver: {
           name: driver.name,
@@ -253,6 +202,11 @@ export class TripRequestService extends Client{
           year: vehicle.year,
           patent: vehicle.patent,
           color: vehicle.color,
+          insuranceCompany: vehicle.insuranceCompany,
+          insuranceType: vehicle.insuranceType,
+          insuranceExpiration: vehicle.insuranceExpiration,
+          policyNumber: vehicle.policyNumber,
+          cuilCuit: vehicle.cuil_cuit,
         },
         reservations: [],
       };
@@ -272,35 +226,12 @@ export class TripRequestService extends Client{
     }
   }
 
-  // Método para actualizar las reservas de un viaje
-  async updateTripReserves(tripRequestId: number): Promise<TripRequest> {
-    // Buscar la solicitud de viaje por ID y sus reservas relacionadas
-    const tripRequest = await this.tripRequestRepository.findOne({
-      where: { idTrip: tripRequestId },
-      relations: ['reservations']
-    });
-
-    // Verificar si la solicitud de viaje existe
-    if (!tripRequest) {
-      throw new NotFoundException('Trip request not found');
-    }
-
-    // Calcular el número de asientos reservados
-    const reservedSeats = tripRequest.reservations.length;
-
-    // Actualizar el número de asientos disponibles en la solicitud de viaje
-    tripRequest.availableSeats -= reservedSeats;
-
-    // Guardar y devolver la solicitud de viaje actualizada
-    return this.tripRequestRepository.save(tripRequest);
-  }
-
 
   async findAll(): Promise<TripRequest[]> {
     const trips = await this.tripRequestRepository.query(
       `SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
               destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
-              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId
+              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId, stateId
       FROM trip_requests`
     );
 
@@ -312,7 +243,7 @@ export class TripRequestService extends Client{
       }
 
       const driver = await this.userRepository.query(
-        `SELECT idUser, name, lastName, phone, photoUser 
+        `SELECT name, lastName, phone, photoUser 
           FROM users 
           WHERE idUser = ?`,
         [trip.idDriver]
@@ -320,22 +251,18 @@ export class TripRequestService extends Client{
 
       const driverDetails = driver.length 
         ? {
-          idDriver: driver[0].idUser,
           name: driver[0].name,
           lastName: driver[0].lastName,
           phone: driver[0].phone,
           photoUser: driver[0].photoUser
         } 
-        : { idDriver: 0, name: '', lastName: '', phone: '', photoUser: '' };
+        : { name: '', lastName: '', phone: '', photoUser: '' };
 
-      const vehicle = await this.vehicleRepository.query(
-        `SELECT idVehicle, brand, model, year, patent, color 
-          FROM vehicles 
-          WHERE idVehicle = ?`,
-        [trip.vehicleId]
-      );
-
-      const vehicleDetails = vehicle.length ? vehicle[0] : { brand: '', model: '', year: '', patent: '', color: '' };
+      // Buscar el vehículo por ID
+      const vehicleDetails = await this.vehicleService.findOne(trip.vehicleId);
+      if (!vehicleDetails) {
+        throw new NotFoundException('Vehicle not found');
+      }
 
       const reservations = await this.tripReservationRepository.query(
         `SELECT idReservation, isPaid, idUser 
@@ -385,6 +312,7 @@ export class TripRequestService extends Client{
         distance: trip.distance,
         timeDifference: trip.timeDifference,
         observations: trip.observations,
+        state: trip.stateId,
         idDriver: trip.idDriver,
         driver: driverDetails,
         vehicle: vehicleDetails,
@@ -399,10 +327,10 @@ export class TripRequestService extends Client{
   async findAllAvailable(): Promise<TripRequest[]> {
     const now = new Date().toISOString(); // Obtener la fecha actual en formato UTC ISO 8601
 
-    const trips = await this.tripRequestRepository.query(
-      `SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
-              destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
-              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId
+    const trips = await this.tripRequestRepository.query(`
+      SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
+             destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
+             availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId, stateId
       FROM trip_requests
       WHERE availableSeats > 0 AND departureTime > ?`, 
       [now]
@@ -415,44 +343,40 @@ export class TripRequestService extends Client{
         trip.compensationId = compensationData ? compensationData.amount : 0;
       }
 
-      const driver = await this.userRepository.query(
-        `SELECT idUser, name, lastName, phone, photoUser 
-          FROM users 
-          WHERE idUser = ?`,
+      const driver = await this.userRepository.query(`
+        SELECT name, lastName, phone, photoUser 
+        FROM users 
+        WHERE idUser = ?`,
         [trip.idDriver]
       );
 
       const driverDetails = driver.length 
         ? {
-          idDriver: driver[0].idUser,
           name: driver[0].name,
           lastName: driver[0].lastName,
           phone: driver[0].phone,
           photoUser: driver[0].photoUser
         } 
-        : { idDriver: 0, name: '', lastName: '', phone: '', photoUser: '' };
+        : { name: '', lastName: '', phone: '', photoUser: '' };
 
-      const vehicle = await this.vehicleRepository.query(
-        `SELECT idVehicle, brand, model, year, patent, color 
-          FROM vehicles 
-          WHERE idVehicle = ?`,
-        [trip.vehicleId]
-      );
+      // Buscar el vehículo por ID
+      const vehicleDetails = await this.vehicleService.findOne(trip.vehicleId);
+      if (!vehicleDetails) {
+        throw new NotFoundException('Vehicle not found');
+      }
 
-      const vehicleDetails = vehicle.length ? vehicle[0] : { brand: '', model: '', year: '', patent: '', color: '' };
-
-      const reservations = await this.tripReservationRepository.query(
-        `SELECT idReservation, isPaid, idUser 
-          FROM trip_reservations 
-          WHERE tripRequestId = ?`,
+      const reservations = await this.tripReservationRepository.query(`
+        SELECT idReservation, isPaid, idUser 
+        FROM trip_reservations 
+        WHERE tripRequestId = ?`,
         [trip.idTrip]
       );
 
       const reservationsWithDetails = await Promise.all(reservations.map(async (reservation) => {
-        const passenger = await this.userRepository.query(
-          `SELECT name, lastName, phone 
-            FROM users 
-            WHERE idUser = ?`,
+        const passenger = await this.userRepository.query(`
+          SELECT name, lastName, phone 
+          FROM users 
+          WHERE idUser = ?`,
           [reservation.idUser]
         );
 
@@ -489,6 +413,7 @@ export class TripRequestService extends Client{
         distance: trip.distance,
         timeDifference: trip.timeDifference,
         observations: trip.observations,
+        state: trip.stateId,
         idDriver: trip.idDriver,
         driver: driverDetails,
         vehicle: vehicleDetails,
@@ -502,29 +427,29 @@ export class TripRequestService extends Client{
 
   async findOne(idTrip: number): Promise<any> {
     /**
-     * Obtiene los detalles de un viaje específico, incluyendo la información del conductor y del vehículo asociado.
+     * Obtiene los detalles de un viaje específico
+     * Esta consulta realiza un `LEFT JOIN` con las tablas `users`, `vehicles` e `insurance` para obtener la información sobre el conductor del viaje, vehículo utilizado y los datos del seguro. 
      * 
-     * Esta consulta realiza un `LEFT JOIN` con las tablas `users` y `vehicles` para obtener información adicional sobre el conductor del viaje y el vehículo utilizado. 
-     * 
-     * @async
-     * @function
-     * @param {number} idTrip - Identificador único del viaje que se desea obtener.
+     * @async @function
+     * @param {number} idTrip - Identificador único del viaje a obtener.
      * @returns {Promise<Object[]>} - Una promesa que resuelve en un array con los detalles del viaje.
      */
-     const tripData = await this.tripRequestRepository.query(`
+    const tripData = await this.tripRequestRepository.query(`
       SELECT
         tr.idTrip, tr.idDriver, tr.pickupNeighborhood, tr.pickupText, 
         ST_AsWKT(tr.pickupLocation) as pickupLocation, 
         tr.destinationNeighborhood, tr.destinationText, 
         ST_AsWKT(tr.destinationLocation) as destinationLocation, 
         tr.availableSeats, tr.compensationId, tr.departureTime, 
-        tr.distance, tr.timeDifference, tr.observations, tr.vehicleId,
+        tr.distance, tr.timeDifference, tr.observations, tr.vehicleId, tr.stateId,
         u.name AS driverName, u.lastName AS driverLastName, 
         u.phone AS driverPhone, u.photoUser AS driverPhoto,
-        v.idVehicle, v.brand, v.model, v.year, v.patent, v.color
+        v.idVehicle, v.brand, v.model, v.year, v.patent, v.color,
+        i.insuranceCompany, i.insuranceType, i.insuranceExpiration, i.policyNumber, i.cuil_cuit
       FROM trip_requests tr
       LEFT JOIN users u ON tr.idDriver = u.idUser
       LEFT JOIN vehicles v ON tr.vehicleId = v.idVehicle
+      LEFT JOIN insurance i ON v.idVehicle = i.idVehicle
       WHERE idTrip = ?`,
       [idTrip]
     );
@@ -580,9 +505,9 @@ export class TripRequestService extends Client{
       distance: tripRequestEntity.distance,
       timeDifference: tripRequestEntity.timeDifference,
       observations: tripRequestEntity.observations,
+      state: tripRequestEntity.stateId,
       idDriver: tripRequestEntity.idDriver,
       driver: {
-        idDriver: tripRequestEntity.idDriver,
         name: tripRequestEntity.driverName,
         lastName: tripRequestEntity.driverLastName,
         phone: tripRequestEntity.driverPhone,
@@ -595,6 +520,11 @@ export class TripRequestService extends Client{
         year: tripRequestEntity.year,
         patent: tripRequestEntity.patent,
         color: tripRequestEntity.color,
+        insuranceCompany: tripRequestEntity.insuranceCompany || null,
+        insuranceType: tripRequestEntity.insuranceType || null,
+        insuranceExpiration: tripRequestEntity.insuranceExpiration || null,
+        policyNumber: tripRequestEntity.policyNumber || null,
+        cuilCuit: tripRequestEntity.cuil_cuit || null,
       },
       reservations: reservationsWithDetails
     };
@@ -700,56 +630,6 @@ export class TripRequestService extends Client{
     await this.tripRequestRepository.remove(tripRequest);
   }
 
-  // Método VIEJO para obtener la distancia y el tiempo entre dos puntos - ELIMINAR DPS DE PROBAR BIEN
-  // async getTimeAndDistanceClientRequest(
-  //     originLat: number,
-  //     originLng: number,
-  //     destinationLat: number,
-  //     destinationLng: number,
-  //     departureTime: string,
-  //     trafficModel: TrafficModel = TrafficModel.best_guess,
-  // ): Promise<DistanceMatrixResponseData> {
-  //     try {
-  //         let departureTimeInSeconds: number;
-  //         if (departureTime === 'now') {
-  //             departureTimeInSeconds = Math.floor(Date.now() / 1000);
-  //         } else {
-  //             const departureTimeValue = new Date(departureTime);
-  //             if (isNaN(departureTimeValue.getTime())) {
-  //                 throw new Error('Invalid departureTime');
-  //             }
-  //             departureTimeInSeconds = Math.floor(departureTimeValue.getTime() / 1000);
-  
-  //             // Verificar si la fecha es posterior al 31 de diciembre de 9999
-  //             const maxTimeInSeconds = new Date('9999-12-31T23:59:59.999Z').getTime() / 1000;
-  //             if (departureTimeInSeconds > maxTimeInSeconds) {
-  //                 departureTimeInSeconds = maxTimeInSeconds;
-  //             }
-  //         }
-  
-  //         const response = await this.client.distancematrix({
-  //             params: {
-  //                 origins: [`${originLat},${originLng}`],
-  //                 destinations: [`${destinationLat},${destinationLng}`],
-  //                 mode: TravelMode.driving,
-  //                 key: this.API_KEY,
-  //                 departure_time: departureTimeInSeconds,
-  //                 traffic_model: trafficModel,
-  //             },
-  //             timeout: 3000,
-  //         });
-  
-  //         if (response.data.status !== 'OK') {
-  //             throw new Error(`Error in Google Maps Distance Matrix API: ${response.data.status}`);
-  //         }
-  
-  //         return response.data;
-  //     } catch (error) {
-  //         console.error('Error fetching distance matrix data:', error);
-  //         throw new Error('Failed to fetch distance matrix data');
-  //     }
-  // }
-
 
   // Método para obtener la distancia y el tiempo entre dos puntos
   async getTimeAndDistanceClientRequest(
@@ -811,7 +691,7 @@ export class TripRequestService extends Client{
     let query = `
       SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation,
               destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation,
-              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId
+              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId, stateId
       FROM trip_requests
       WHERE 1=1
     `;
@@ -851,8 +731,8 @@ export class TripRequestService extends Client{
   async findAllSorted(originLat: number, originLng: number): Promise<TripRequest[]> {
     const allTrips = await this.tripRequestRepository.query(`
       SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation,
-              destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation,
-              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId
+             destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation,
+             availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId
       FROM trip_requests
     `);
 
@@ -888,22 +768,22 @@ export class TripRequestService extends Client{
     const currentTime = new Date();
 
     // Consultar viajes futuros
-    const futureTrips = await this.tripRequestRepository.query(
-      `SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
-              destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
-              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId
-        FROM trip_requests
-        WHERE idDriver = ? AND departureTime >= ?`,
+    const futureTrips = await this.tripRequestRepository.query(`
+      SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
+             destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
+             availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId, stateId
+      FROM trip_requests
+      WHERE idDriver = ? AND departureTime >= ?`,
       [driverId, currentTime]
     );
 
     // Consultar viajes pasados
-    const pastTrips = await this.tripRequestRepository.query(
-      `SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
-              destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
-              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId
-        FROM trip_requests
-        WHERE idDriver = ? AND departureTime < ?`,
+    const pastTrips = await this.tripRequestRepository.query(`
+      SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
+             destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
+             availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId, stateId
+      FROM trip_requests
+      WHERE idDriver = ? AND departureTime < ?`,
       [driverId, currentTime]
     );
 
@@ -930,10 +810,10 @@ export class TripRequestService extends Client{
   async updateTripStatus(idTrip: number, newStatus: number): Promise<any> {
     try {
       // Actualizar el estado del viaje en la base de datos
-      const result = await this.tripRequestRepository.query(
-        `UPDATE trip_requests 
-         SET stateId = ? 
-         WHERE idTrip = ?`,
+      const result = await this.tripRequestRepository.query(`
+        UPDATE trip_requests 
+        SET stateId = ? 
+        WHERE idTrip = ?`,
         [newStatus, idTrip]
       );
 
@@ -974,36 +854,33 @@ export class TripRequestService extends Client{
       trip.compensationId = compensationData ? compensationData.amount : 0;
     }
 
-    const driver = await this.userRepository.query(
-      `SELECT idUser, name, lastName, phone, photoUser 
-        FROM users 
-        WHERE idUser = ?`,
+    const driver = await this.userRepository.query(`
+      SELECT name, lastName, phone, photoUser 
+      FROM users 
+      WHERE idUser = ?`,
       [trip.idDriver]
     );
 
     const driverDetails = driver.length ? driver[0] : { name: '', lastName: '', phone: '', photoUser: '' };
 
-    const vehicle = await this.vehicleRepository.query(
-      `SELECT idVehicle, brand, model, year, patent, color 
-        FROM vehicles 
-        WHERE idVehicle = ?`,
-      [trip.vehicleId]
-    );
+    // Buscar el vehículo por ID
+    const vehicleDetails = await this.vehicleService.findOne(trip.vehicleId);
+    if (!vehicleDetails) {
+      throw new NotFoundException('Vehicle not found');
+    }
 
-    const vehicleDetails = vehicle.length ? vehicle[0] : { brand: '', model: '', year: '', patent: '', color: '' };
-
-    const reservations = await this.tripReservationRepository.query(
-      `SELECT idReservation, isPaid, idUser 
-        FROM trip_reservations 
-        WHERE tripRequestId = ?`,
+    const reservations = await this.tripReservationRepository.query(`
+      SELECT idReservation, isPaid, idUser 
+      FROM trip_reservations 
+      WHERE tripRequestId = ?`,
       [trip.idTrip]
     );
 
     const reservationsWithDetails = await Promise.all(reservations.map(async (reservation) => {
-      const passenger = await this.userRepository.query(
-        `SELECT name, lastName, phone 
-          FROM users 
-          WHERE idUser = ?`,
+      const passenger = await this.userRepository.query(`
+        SELECT name, lastName, phone 
+        FROM users 
+        WHERE idUser = ?`,
         [reservation.idUser]
       );
 
@@ -1037,6 +914,7 @@ export class TripRequestService extends Client{
       distance: trip.distance,
       timeDifference: trip.timeDifference,
       observations: trip.observations,
+      state: trip.stateId,
       idDriver: trip.idDriver,
       driver: driverDetails,
       vehicle: vehicleDetails,
