@@ -12,13 +12,20 @@ import { CompensationService } from 'src/compensation/compensation.service';
 import { VehiclesService } from 'src/vehicles/vehicles.service';
 import { VehiclesModule } from 'src/vehicles/vehicles.module';
 import { InsuranceService } from 'src/insurance/insurance.service';
+import { TripReservationService } from 'src/trip_reservation/trip_reservation.service';
+import { PaymentsService } from 'src/payments/payments.service';
+import { PaymentsModule } from 'src/payments/payments.module';
+import { Payments } from 'src/payments/payments.entity';
+import { Cards } from 'src/cards/cards.entity';
+import { CardsMock } from 'src/cards_mock/cards-mock.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TripRequest, Vehicle, TripReservation, User, Compensation, TripState]),
-    VehiclesModule
+    TypeOrmModule.forFeature([TripRequest, Vehicle, TripReservation, User, Compensation, TripState, Payments, Cards, CardsMock]),
+    VehiclesModule,
+    PaymentsModule
   ],
-  providers: [ TripRequestService, CompensationService, VehiclesService, InsuranceService ],
+  providers: [ TripRequestService, CompensationService, VehiclesService, InsuranceService, PaymentsService, TripReservationService ],
   controllers: [ TripRequestController ],
   exports: [ TripRequestService, CompensationService ],
 })

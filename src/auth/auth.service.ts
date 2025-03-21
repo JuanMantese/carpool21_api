@@ -112,7 +112,7 @@ export class AuthService {
     const payload = { idUser: userFound.idUser, name: userFound.name, lastName: userFound.lastName, roles: rolesId };
     
     // Genera el token y refreshToken JWT
-    const token = this.jwtService.sign(payload);
+    const token = this.jwtService.sign(payload, { expiresIn: '7h' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
     
 

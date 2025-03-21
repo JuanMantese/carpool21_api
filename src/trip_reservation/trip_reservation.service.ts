@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { TripReservation } from './trip_reservation.entity';
 import { UpdateTripReservationDTO } from './dto/update-trip-reservation.dto';
 import { TripRequest } from 'src/trip_request/trip_request.entity';
@@ -24,9 +24,12 @@ export class TripReservationService {
     @InjectRepository(Vehicle)
     private vehicleRepository: Repository<Vehicle>,
 
+    // Usamos forwardRef para evitar circularidad
+    @Inject(forwardRef(() => TripRequestService))
+    private readonly tripRequestService: TripRequestService,
+
     private readonly compensationService: CompensationService,
     private readonly paymentsService: PaymentsService,
-    private readonly tripRequestService: TripRequestService,
   ) {}
 
   // Método para reservar un asiento en un viaje
@@ -193,6 +196,7 @@ export class TripReservationService {
     return {
       idReservation: reservation.idReservation,
       isPaid: Boolean(reservation.isPaid),
+      cancellationDate: reservation.cancellationDate,
       tripRequest: {
         idTrip: reservation.idTrip,
         idDriver: reservation.idDriver,
@@ -434,7 +438,8 @@ export class TripReservationService {
 
   // Metodo para traer todas las reservas de un Usuario especifico
   async getReservations(passengerId: number): Promise<{ futureReservations: any[], pastReservations: any[] }> {
-    const currentTime = new Date().toISOString();
+    const currentDate = new Date(); // Obtener la fecha actual 
+    const now = new Date(currentDate.getTime() - currentDate.getTimezoneOffset() * 60000).toISOString(); // Ajustando la fecha a mi Zona con formato ISO
 
     // Obtener todas las reservas del usuario
     const reservations = await this.tripReservationRepository.query(
@@ -462,11 +467,15 @@ export class TripReservationService {
     // Separar reservas futuras y pasadas según la fecha de salida
     // const futureReservations = reservationsWithDetails.filter(reservation => reservation.tripRequest.departureTime > currentTime);
     const futureReservations = reservationsWithDetails.filter(reservation => 
-      !reservation.cancellationDate && reservation.tripRequest.departureTime > currentTime
+      !reservation.cancellationDate && 
+      reservation.tripRequest.departureTime > now && 
+      reservation.tripRequest.state != 4 // State Trip != 4 - El viaje sigue en curso
     );
     // const pastReservations = reservationsWithDetails.filter(reservation => reservation.tripRequest.departureTime <= currentTime);
     const pastReservations = reservationsWithDetails.filter(reservation => 
-      reservation.cancellationDate || reservation.tripRequest.departureTime <= currentTime
+      reservation.cancellationDate || 
+      reservation.tripRequest.departureTime <= now || 
+      reservation.tripRequest.state == 4 // State Trip == 4 - El viaje a finalizado 
     );
 
     return {

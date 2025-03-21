@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, HttpException, HttpStatus, Inject, forwardRef } from '@nestjs/common';
 import { Client } from '@googlemaps/google-maps-services-js';
 import { InjectRepository } from '@nestjs/typeorm';
 import { TripRequest } from './trip_request.entity';
@@ -16,6 +16,7 @@ import { parsePointDestination } from 'src/utils/google-maps/parse-point-destina
 import { calculateDistance } from 'src/utils/google-maps/calculate-distance.util';
 import { CompensationService } from 'src/compensation/compensation.service';
 import { VehiclesService } from 'src/vehicles/vehicles.service';
+import { TripReservationService } from 'src/trip_reservation/trip_reservation.service';
 
 @Injectable()
 export class TripRequestService extends Client{
@@ -30,6 +31,10 @@ export class TripRequestService extends Client{
     @InjectRepository(Vehicle) private vehicleRepository: Repository<Vehicle>,
     @InjectRepository(TripReservation) private tripReservationRepository: Repository<TripReservation>,
     @InjectRepository(User) private userRepository: Repository<User>,
+
+    // Usamos forwardRef para evitar circularidad
+    @Inject(forwardRef(() => TripReservationService))
+    private readonly tripTeservationService: TripReservationService,
 
     private readonly compensationService: CompensationService,
     private readonly vehicleService: VehiclesService,
@@ -325,8 +330,9 @@ export class TripRequestService extends Client{
 
 
   async findAllAvailable(): Promise<TripRequest[]> {
-    const now = new Date().toISOString(); // Obtener la fecha actual en formato UTC ISO 8601
-
+    const currentDate = new Date(); // Obtener la fecha actual 
+    const now = new Date(currentDate.getTime() - currentDate.getTimezoneOffset() * 60000).toISOString(); // Ajustando la fecha a mi Zona con formato ISO
+    
     const trips = await this.tripRequestRepository.query(`
       SELECT idTrip, idDriver, pickupNeighborhood, pickupText, ST_AsWKT(pickupLocation) as pickupLocation, 
              destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
@@ -625,9 +631,56 @@ export class TripRequestService extends Client{
 
 
   // Método para eliminar una solicitud de viaje por ID
-  async remove(idTrip: number): Promise<void> {
+  async remove(idTrip: number): Promise<any> {
+    // Buscar la solicitud de viaje por ID y sus reservas relacionadas
     const tripRequest = await this.findOne(idTrip);
-    await this.tripRequestRepository.remove(tripRequest);
+
+    // Verificar si la solicitud de viaje existe
+    if (!tripRequest) {
+      throw new NotFoundException(`Solicitud de viaje con ID ${idTrip} no encontrada`);
+    }
+
+    // Obtener la fecha actual para registrar la cancelación
+    const cancellationDate = new Date();
+
+    try {
+      // Iniciar transacción para garantizar la consistencia
+      await this.tripRequestRepository.manager.transaction(async (transactionalEntityManager) => {
+        // Actualizar el estado del viaje y registrar la fecha de cancelación
+        await transactionalEntityManager.query(`
+          UPDATE trip_requests 
+          SET stateId = ?, cancellationDate = ? 
+          WHERE idTrip = ?`,
+          [2, cancellationDate, idTrip]
+        );
+
+        // Cancelar todas las reservas asociadas
+        if (tripRequest.reservations && tripRequest.reservations.length > 0) {
+          for (const reservation of tripRequest.reservations) {
+            this.tripTeservationService.cancelReservation(reservation.idReservation);
+          }
+        }
+      });
+
+      // if (result.affectedRows === 0) {
+      //   throw new NotFoundException('Trip request not found or already updated');
+      // }
+
+      return { 
+        message: 'Viaje cancelado exitosamente', 
+        idTrip: Number(idTrip),
+        newStatus: 2
+      };
+    } catch (error) {
+      console.error('Error cencelando el viaje:', error);
+      throw new HttpException(
+        {
+          message: 'No se pudo cancelar el viaje',
+          details: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
 
@@ -773,7 +826,7 @@ export class TripRequestService extends Client{
              destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId, stateId
       FROM trip_requests
-      WHERE idDriver = ? AND departureTime >= ?`,
+      WHERE idDriver = ? AND departureTime >= ? AND stateId != 4`,
       [driverId, currentTime]
     );
 
@@ -783,7 +836,7 @@ export class TripRequestService extends Client{
              destinationNeighborhood, destinationText, ST_AsWKT(destinationLocation) as destinationLocation, 
              availableSeats, compensationId, departureTime, distance, timeDifference, observations, vehicleId, stateId
       FROM trip_requests
-      WHERE idDriver = ? AND departureTime < ?`,
+      WHERE idDriver = ? AND (departureTime < ? OR stateId = 4)`,
       [driverId, currentTime]
     );
 
@@ -836,6 +889,36 @@ export class TripRequestService extends Client{
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+
+  /**
+   * Obtiene las reservas de un viaje específico.
+   *
+   * @async @function
+   * @param {number} idTrip - Identificador único del viaje.
+   * @returns {Promise<Object[]>} - Una promesa que resuelve en un array con las reservas del viaje.
+   */
+  async findTripReserves(idTrip: number): Promise<any[]> {
+    const reservations = await this.tripReservationRepository.query(`
+      SELECT 
+        r.idReservation, r.isPaid, r.idUser,
+        u.name AS passengerName, u.lastName AS passengerLastName, u.phone AS passengerPhone
+      FROM trip_reservations r
+      LEFT JOIN users u ON r.idUser = u.idUser
+      WHERE r.tripRequestId = ?
+    `, [idTrip]);
+  
+    return reservations.map(reservation => ({
+      idReservation: reservation.idReservation,
+      isPaid: Boolean(reservation.isPaid),
+      passenger: {
+        idUser: reservation.idUser,
+        name: reservation.passengerName,
+        lastName: reservation.passengerLastName,
+        phone: reservation.passengerPhone,
+      },
+    }));
   }
 
 

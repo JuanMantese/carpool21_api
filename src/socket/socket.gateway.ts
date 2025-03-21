@@ -54,19 +54,104 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  // Driver Position in Trip
+  /**
+   * Maneja la actualización de la posición del conductor en un viaje y la emite la posicion a un pasajero específico.
+   * 
+   * @param {Socket} client - El socket del conductor que envía su nueva posición.
+   * @param {Object} data - Datos de la nueva posición del conductor.
+   * @param {string} data.trip_id - Identificador del viaje para obtener las reservas y los pasajeros a los que se les notificará la nueva posición del conductor.
+   * @param {number} data.lat - Latitud de la nueva posición del conductor.
+   * @param {number} data.lng - Longitud de la nueva posición del conductor.
+   * 
+   * @emits `new_driver_position_trip/{id_passenger}` - Evento que notifica al pasajero la nueva posición del conductor.
+   */
   @SubscribeMessage('change_driver_position_trip')
-  handleChangeDriverPositionTrip(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
+  async handleChangeDriverPositionTrip(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
     console.log('Emitiendo NUEVA POSICION del Conductor en un Viaje: ', data);
-    console.log(data.id_passenger);
     
+    const tripId = data.trip_id; // Se debe enviar el ID del viaje en el evento
+    if (!tripId) {
+      console.error('Error: trip_id no proporcionado');
+      return;
+    }
 
-    this.server.emit(`new_driver_position_trip/${data.id_passenger}`, { 
-      id_socket: client.id, 
-      lat: data.lat, 
-      lng: data.lng 
-    });
+    try {
+      // Obtener los pasajeros del viaje
+      const reserves = await this.tripService.findTripReserves(tripId);
+  
+      if (!reserves || reserves.length === 0) {
+        console.error('Error: No hay reserves en este viaje');
+        return;
+      }
+  
+      // Emitir a todos los pasajeros que tienen reserva en el viaje
+      reserves.forEach(reserve => {
+        this.server.emit(`new_driver_position_trip/${reserve.passenger.idUser}`, { 
+          id_socket: client.id, 
+          lat: data.lat, 
+          lng: data.lng 
+        });
+      });
+    } catch (error) {
+      console.error('Error al obtener pasajeros:', error);
+    }
   }
+
+  // Cambio de estado del viaje
+  // Emitiendo NOTIFICACIÓN cuando un viaje cambia de estado
+  @SubscribeMessage('update_status_trip')
+  async handleUpdateStatusTrip(@ConnectedSocket() client: Socket, @MessageBody() data: any) {
+    console.log('Emitiendo NOTIFICACIÓN de cambio de estado del viaje: ', data);
+
+    const tripId = data.trip_id; // ID del viaje que cambió de estado
+    if (!tripId) {
+      console.error('Error: trip_id no proporcionado');
+      return;
+    }
+
+    try {
+      // Obtener los pasajeros con reserva en este viaje
+      const tripDetail = await this.tripService.findOne(tripId);
+  
+      if (!tripDetail || tripDetail.reservations.length === 0) {
+        console.error('Error: No hay reservas en este viaje');
+        return;
+      }
+      
+      console.log('El estado del viaje ha cambiado');
+      console.log(tripDetail.state);
+      console.log(tripDetail.state === 3);
+
+      
+      if (tripDetail.state === 3) {
+        // Emitir a todos los pasajeros que tienen reserva en el viaje que el mismo a comenzado
+        tripDetail.reservations.forEach(reserve => {
+          this.server.emit(`trip_status_start/${reserve.passenger.idUser}`, { 
+            id_socket: client.id,
+            trip_id: tripId,
+            state: tripDetail.state
+          });
+        });
+        console.log('Emitiendo');
+        
+      } else {
+        // Emitir a todos los pasajeros que tienen reserva en el viaje que el mismo a finalizado
+        tripDetail.reservations.forEach(reserve => {
+          this.server.emit(`trip_status_update/${reserve.passenger.idUser}`, { 
+            id_socket: client.id,
+            trip_id: tripId,
+            state: tripDetail.state
+          });
+        });
+        console.log('NO Emitido');
+
+      }
+
+    } catch (error) {
+      console.error('Error al obtener pasajeros:', error);
+    }
+  }
+
 
   // New Trip Offer
   @SubscribeMessage('new_trip_offer')
@@ -95,7 +180,6 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     console.log('Emitiendo NUEVA RESERVA de un viaje del Pasajero: ', data);
     console.log('Payload recibido:', typeof data);
-    console.log(data);
 
     try {
 

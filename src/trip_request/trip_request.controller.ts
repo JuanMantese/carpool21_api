@@ -35,12 +35,14 @@ export class TripRequestController {
     return this.tripRequestService.findAllAvailable();
   }
 
+  /** Find One Trip By Id */
   @UseGuards(JwtAuthGuard)
   @Get('findOne/:id')   // GET /trip-request/findOne/:id
   findOne(@Param('id') id: number) {
     return this.tripRequestService.findOne(id);
   }
 
+  /** Modificando Viaje mediante su Id */
   @HasRoles(JwtRole.DRIVER)
   @UseGuards(JwtAuthGuard, JwtRolesGuard)
   @Put('update/:id')     // PUT /trip-request/update/:id
@@ -48,8 +50,9 @@ export class TripRequestController {
     return this.tripRequestService.updateTrip(id, updateTripRequestDTO);
   }
 
+  /** Cancelar Viaje mediante su Id */
   @HasRoles(JwtRole.DRIVER)
-  @UseGuards(JwtAuthGuard, JwtRolesGuard)
+  @UseGuards(JwtAuthGuard)
   @Delete('delete/:id') // DELETE /trip-request/delete/:id
   remove(@Param('id') id: number) {
     return this.tripRequestService.remove(id);
@@ -96,5 +99,12 @@ export class TripRequestController {
   async updateStatus(@Param('idTrip') idTrip: number, @Body() updateStatusDto: UpdateStatusDto) {
     const { newStatus } = updateStatusDto; 
     return this.tripRequestService.updateTripStatus(idTrip, newStatus);
+  }
+
+  /** Find All Resererves in the Trip By Id */
+  @UseGuards(JwtAuthGuard)
+  @Get('findTripReserves/:idTrip')   // GET /trip-request/findOne/:id
+  findTripReserves(@Param('idTrip') idTrip: number) {
+    return this.tripRequestService.findOne(idTrip);
   }
 }

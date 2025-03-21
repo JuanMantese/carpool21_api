@@ -75,4 +75,7 @@ export class TripRequest {
   @OneToOne(() => Compensation, { eager: true, nullable: true }) // Carga automáticamente la compensación
   @JoinColumn({ name: 'compensationId' }) 
   compensationId: Compensation;
+
+  @Column({ nullable: true })
+  cancellationDate?: Date;
 }
