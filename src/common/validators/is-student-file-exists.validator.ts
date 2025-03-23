@@ -12,7 +12,7 @@ export class IsStudentFileExistsConstraint implements ValidatorConstraintInterfa
     async validate(studentFile: string, args: ValidationArguments) {
         try {
             const student = await this.studentsService.findStudent(studentFile);
-            return !!student && student.enrrolment === 'Matriculado' && student.regularity === 'Cursando regular';
+            return !!student && student.enrrolment === 'Matriculado' && student.regularity === 'Cursando Regular';
         } catch (error) {
             console.error('Error validando el legajo del estudiante:', error);
             return false;
